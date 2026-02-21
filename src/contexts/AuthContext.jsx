@@ -9,21 +9,15 @@ export function AuthProvider({ children }) {
   const [isRecovery, setIsRecovery] = useState(false)
 
   useEffect(() => {
-    // Debug: log URL hash on mount
-    console.log('[Auth] URL hash:', window.location.hash ? 'present' : 'empty')
-    console.log('[Auth] URL:', window.location.href.substring(0, 80) + '...')
-
-    // Check URL hash for recovery token before anything else
+    // Check URL hash for recovery token
     const hash = window.location.hash
     if (hash && hash.includes('type=recovery')) {
       setIsRecovery(true)
     }
 
     // Listen for auth changes (login, logout, token refresh)
-    // Set up listener BEFORE getSession so we don't miss events
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        console.log('[Auth] onAuthStateChange:', event, session?.user?.email ?? 'no user')
         setUser(session?.user ?? null)
         setLoading(false)
         if (event === 'PASSWORD_RECOVERY') {
@@ -32,14 +26,23 @@ export function AuthProvider({ children }) {
       }
     )
 
-    // Check if there's already a logged-in session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('[Auth] getSession:', session?.user?.email ?? 'no session')
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
+    // Handle PKCE code exchange — if URL has ?code=, exchange it for a session
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code')
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        if (error) console.error('[Auth] Code exchange failed:', error.message)
+        // Clean the code from the URL without reloading
+        window.history.replaceState({}, '', window.location.pathname)
+      })
+    } else {
+      // No code in URL — check for existing session
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setUser(session?.user ?? null)
+        setLoading(false)
+      })
+    }
 
-    // Clean up listener when component unmounts
     return () => subscription.unsubscribe()
   }, [])
 
