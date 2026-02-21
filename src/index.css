@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sketch: "Architects Daughter", cursive;
+  --color-cream: #faf8f5;
+  --color-cream-dark: #f0ece5;
+  --color-ink: #1b1b1b;
+  --color-ink-light: #8b8580;
+  --color-ink-faint: #c5c1b9;
+  --color-accent: #FFEB3B;
+  --color-accent-hover: #FFD43B;
+  --color-accent-soft: #f5edcb;
+  --color-card: #ffffff;
+}
+
+body {
+  font-family: var(--font-sketch);
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+}

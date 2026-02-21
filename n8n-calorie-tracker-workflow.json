@@ -1,0 +1,228 @@
+{
+  "name": "Calorie Tracker",
+  "nodes": [
+    {
+      "id": "node-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "calorie-tracker",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "calorie-tracker-webhook"
+    },
+    {
+      "id": "node-validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [480, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-image",
+              "leftValue": "={{ $json.body.image }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            },
+            {
+              "id": "condition-mealtype",
+              "leftValue": "={{ $json.body.mealType }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "node-prepare",
+      "name": "Prepare Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [720, 200],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-prompt",
+              "name": "systemPrompt",
+              "value": "You are a nutrition analysis AI. Analyse food images and return structured data about detected foods, their estimated portions, and nutritional information.\n\nRULES:\n1. Identify ALL visible food items in the image\n2. Estimate portion sizes based on visual cues (plate size, utensils for scale)\n3. Provide calorie and macronutrient estimates per item\n4. Use UK English spelling throughout\n5. If the image is blurry or unclear, still attempt analysis but set confidence to \"low\"\n6. If the image contains no food, return an empty detectedFoods array with confidence \"low\" and a note explaining the issue\n\nRESPONSE FORMAT (return ONLY this JSON, no other text):\n{\n  \"detectedFoods\": [\n    {\n      \"name\": \"Food item name\",\n      \"quantity\": \"Estimated portion (e.g., '2 eggs', '150g', '1 cup')\",\n      \"calories\": 180,\n      \"protein\": 12,\n      \"carbs\": 2,\n      \"fat\": 14\n    }\n  ],\n  \"confidence\": \"high|medium|low\",\n  \"notes\": \"Any relevant observations about the meal\"\n}\n\nPORTION ESTIMATION GUIDELINES:\n- Use common plate sizes (standard dinner plate ~25cm) for scale\n- Default to medium/average portions when uncertain\n- Round calories to nearest 5, macros to nearest 1g\n- For drinks, estimate volume from glass/cup size",
+              "type": "string"
+            },
+            {
+              "id": "assign-image",
+              "name": "imageData",
+              "value": "={{ $('Webhook').item.json.body.image }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-meal",
+              "name": "mealType",
+              "value": "={{ $('Webhook').item.json.body.mealType }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "node-openai",
+      "name": "OpenAI Vision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ JSON.stringify($json.systemPrompt) }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Analyse this {{ $json.mealType }} meal. Identify all food items, estimate portions and calories. Return ONLY valid JSON.\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": {{ JSON.stringify($json.imageData) }},\n            \"detail\": \"high\"\n          }\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 1000,\n  \"temperature\": 0.3\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "node-parse",
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 200],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nconst cleaned = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\nconst parsed = JSON.parse(cleaned);\n\nconst foods = parsed.detectedFoods || parsed.foods || parsed.items || [];\n\nconst totals = foods.reduce((acc, food) => ({\n  calories: acc.calories + (food.calories || 0),\n  protein: acc.protein + (food.protein || 0),\n  carbs: acc.carbs + (food.carbs || 0),\n  fat: acc.fat + (food.fat || 0),\n}), { calories: 0, protein: 0, carbs: 0, fat: 0 });\n\nreturn [{\n  json: {\n    success: true,\n    data: {\n      detectedFoods: foods,\n      totalCalories: totals.calories,\n      totalProtein: totals.protein,\n      totalCarbs: totals.carbs,\n      totalFat: totals.fat,\n      mealType: $('Prepare Payload').item.json.mealType,\n      confidence: parsed.confidence || 'medium',\n      notes: parsed.notes || 'Portion sizes estimated from visual cues'\n    }\n  }\n}];"
+      }
+    },
+    {
+      "id": "node-respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1440, 200],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "node-respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [720, 420],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: \"Missing required fields: image and mealType\" }) }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Prepare Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Payload": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Vision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Vision": {
+      "main": [
+        [
+          {
+            "node": "Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
