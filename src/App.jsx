@@ -12,6 +12,7 @@ import {
   getTodaySummary,
   deleteMeal,
 } from './services/storage'
+import { getGoals, GOAL_DEFAULTS } from './services/preferences'
 import History from './pages/History'
 import ProfileMenu from './components/ProfileMenu'
 import { CameraIcon, BarChartIcon, ClockIcon, UtensilsIcon } from './components/Icons'
@@ -114,6 +115,7 @@ function ResetPasswordForm() {
 function MainApp({ user, signOut }) {
   const [screen, setScreen] = useState('log')
   const [weekStartDay, setWeekStartDay] = useState(1)
+  const [goals, setGoals] = useState({ ...GOAL_DEFAULTS })
   const [mealType, setMealType] = useState(null)
   const [imageBase64, setImageBase64] = useState(null)
   const [isAnalysing, setIsAnalysing] = useState(false)
@@ -137,6 +139,7 @@ function MainApp({ user, signOut }) {
 
   useEffect(() => {
     refreshData()
+    getGoals().then(setGoals)
   }, [refreshData])
 
   const handleAnalyse = async () => {
@@ -197,7 +200,7 @@ function MainApp({ user, signOut }) {
           <UtensilsIcon className="w-5 h-5 text-ink" />
           <h1 className="text-lg font-bold text-ink">CalorieTracker</h1>
           <div className="ml-auto">
-            <ProfileMenu onWeekStartChange={setWeekStartDay} />
+            <ProfileMenu onWeekStartChange={setWeekStartDay} onGoalsChange={setGoals} />
           </div>
         </div>
       </header>
@@ -272,6 +275,7 @@ function MainApp({ user, signOut }) {
             meals={meals}
             summary={summary}
             onDeleteMeal={handleDeleteMeal}
+            goals={goals}
           />
         )}
 

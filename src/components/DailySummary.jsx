@@ -1,6 +1,5 @@
 import MealCard from './MealCard'
-
-const CALORIE_TARGET = 2000
+import { calcMacroGrams, GOAL_DEFAULTS } from '../services/preferences'
 
 function MacroBar({ label, value, max }) {
   const percentage = max > 0 ? Math.min((value / max) * 100, 100) : 0
@@ -14,14 +13,14 @@ function MacroBar({ label, value, max }) {
           style={{ width: `${percentage}%` }}
         />
       </div>
-      <span className="text-xs font-bold text-ink w-10 text-right">
-        {Math.round(value)}g
+      <span className="text-xs font-bold text-ink w-16 text-right">
+        {Math.round(value)}g / {max}g
       </span>
     </div>
   )
 }
 
-export default function DailySummary({ meals, summary, onDeleteMeal }) {
+export default function DailySummary({ meals, summary, onDeleteMeal, goals = GOAL_DEFAULTS }) {
   const today = new Date().toLocaleDateString('en-GB', {
     weekday: 'long',
     day: 'numeric',
@@ -29,8 +28,13 @@ export default function DailySummary({ meals, summary, onDeleteMeal }) {
     year: 'numeric',
   })
 
+  const calorieTarget = goals.calorie_target
+  const { proteinG, carbsG, fatG } = calcMacroGrams(
+    goals.calorie_target, goals.protein_pct, goals.carbs_pct, goals.fat_pct
+  )
+
   const caloriePercentage = Math.min(
-    (summary.totalCalories / CALORIE_TARGET) * 100,
+    (summary.totalCalories / calorieTarget) * 100,
     100
   )
 
@@ -74,7 +78,7 @@ export default function DailySummary({ meals, summary, onDeleteMeal }) {
                 {Math.round(summary.totalCalories)}
               </span>
               <span className="text-xs text-ink-faint">
-                / {CALORIE_TARGET} kcal
+                / {calorieTarget} kcal
               </span>
             </div>
           </div>
@@ -84,9 +88,9 @@ export default function DailySummary({ meals, summary, onDeleteMeal }) {
         </div>
 
         <div className="mt-5 space-y-2.5">
-          <MacroBar label="Protein" value={summary.totalProtein} max={150} />
-          <MacroBar label="Carbs" value={summary.totalCarbs} max={250} />
-          <MacroBar label="Fat" value={summary.totalFat} max={65} />
+          <MacroBar label="Protein" value={summary.totalProtein} max={proteinG} />
+          <MacroBar label="Carbs" value={summary.totalCarbs} max={carbsG} />
+          <MacroBar label="Fat" value={summary.totalFat} max={fatG} />
         </div>
       </div>
 
