@@ -135,6 +135,7 @@ export default function ProfileMenu({ onWeekStartChange, onGoalsChange }) {
                 type="number"
                 min="500"
                 max="10000"
+                step="100"
                 value={goalForm.calorie_target}
                 onChange={e => setGoalForm(f => ({ ...f, calorie_target: parseInt(e.target.value) || 0 }))}
                 className="w-full text-sm bg-cream border-2 border-ink-faint rounded-md px-3 py-2 text-ink font-sketch focus:border-ink outline-none"
