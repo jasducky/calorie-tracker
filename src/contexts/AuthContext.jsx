@@ -9,6 +9,10 @@ export function AuthProvider({ children }) {
   const [isRecovery, setIsRecovery] = useState(false)
 
   useEffect(() => {
+    // Debug: log URL hash on mount
+    console.log('[Auth] URL hash:', window.location.hash ? 'present' : 'empty')
+    console.log('[Auth] URL:', window.location.href.substring(0, 80) + '...')
+
     // Check URL hash for recovery token before anything else
     const hash = window.location.hash
     if (hash && hash.includes('type=recovery')) {
@@ -19,6 +23,7 @@ export function AuthProvider({ children }) {
     // Set up listener BEFORE getSession so we don't miss events
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log('[Auth] onAuthStateChange:', event, session?.user?.email ?? 'no user')
         setUser(session?.user ?? null)
         setLoading(false)
         if (event === 'PASSWORD_RECOVERY') {
@@ -29,6 +34,7 @@ export function AuthProvider({ children }) {
 
     // Check if there's already a logged-in session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('[Auth] getSession:', session?.user?.email ?? 'no session')
       setUser(session?.user ?? null)
       setLoading(false)
     })
