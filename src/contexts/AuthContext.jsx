@@ -15,7 +15,8 @@ export function AuthProvider({ children }) {
       setIsRecovery(true)
     }
 
-    // Listen for auth changes (login, logout, token refresh)
+    // Listen for auth changes (login, logout, token refresh, PKCE code exchange)
+    // detectSessionInUrl handles the ?code= exchange automatically
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setUser(session?.user ?? null)
@@ -26,22 +27,11 @@ export function AuthProvider({ children }) {
       }
     )
 
-    // Handle PKCE code exchange — if URL has ?code=, exchange it for a session
-    const params = new URLSearchParams(window.location.search)
-    const code = params.get('code')
-    if (code) {
-      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-        if (error) console.error('[Auth] Code exchange failed:', error.message)
-        // Clean the code from the URL without reloading
-        window.history.replaceState({}, '', window.location.pathname)
-      })
-    } else {
-      // No code in URL — check for existing session
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setUser(session?.user ?? null)
-        setLoading(false)
-      })
-    }
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      setLoading(false)
+    })
 
     return () => subscription.unsubscribe()
   }, [])
