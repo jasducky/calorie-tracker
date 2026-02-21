@@ -7,6 +7,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [isRecovery, setIsRecovery] = useState(false)
+  const [authDebug, setAuthDebug] = useState(null)
 
   useEffect(() => {
     // Check URL hash for recovery token
@@ -15,8 +16,7 @@ export function AuthProvider({ children }) {
       setIsRecovery(true)
     }
 
-    // Listen for auth changes (login, logout, token refresh, PKCE code exchange)
-    // detectSessionInUrl handles the ?code= exchange automatically
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setUser(session?.user ?? null)
@@ -27,11 +27,29 @@ export function AuthProvider({ children }) {
       }
     )
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
+    // Handle PKCE code exchange manually (detectSessionInUrl is off)
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code')
+    if (code) {
+      // Show debug info on screen so we can see what's happening
+      const verifierKeys = Object.keys(localStorage).filter(k => k.includes('supabase') || k.includes('pkce') || k.includes('code'))
+      setAuthDebug(`Code found: ${code.substring(0, 8)}... | localStorage keys: ${verifierKeys.join(', ') || 'NONE'}`)
+
+      supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
+        if (error) {
+          setAuthDebug(prev => `${prev} | EXCHANGE ERROR: ${error.message}`)
+        } else {
+          setAuthDebug(prev => `${prev} | SUCCESS: ${data.session?.user?.email}`)
+          window.history.replaceState({}, '', window.location.pathname)
+        }
+      })
+    } else {
+      // No code — check existing session
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setUser(session?.user ?? null)
+        setLoading(false)
+      })
+    }
 
     return () => subscription.unsubscribe()
   }, [])
@@ -75,7 +93,12 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, isRecovery, signInWithGoogle, signUpWithEmail, signInWithEmail, resetPassword, updatePassword, signOut }}>
+    <AuthContext.Provider value={{ user, loading, isRecovery, authDebug, signInWithGoogle, signUpWithEmail, signInWithEmail, resetPassword, updatePassword, signOut }}>
+      {authDebug && (
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#1a1a1a', color: '#0f0', padding: '12px', fontSize: '12px', fontFamily: 'monospace', zIndex: 9999, wordBreak: 'break-all' }}>
+          DEBUG: {authDebug}
+        </div>
+      )}
       {children}
     </AuthContext.Provider>
   )
